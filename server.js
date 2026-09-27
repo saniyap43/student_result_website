@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
-const STORE = path.join(ROOT, 'server-data');
+const STORE = path.resolve(process.env.DATA_DIR || path.join(ROOT, 'server-data'));
 fs.mkdirSync(STORE, { recursive: true });
 const db = new DatabaseSync(path.join(STORE, 'portal.sqlite'));
 function transaction(work){db.exec('BEGIN IMMEDIATE');try{const value=work();db.exec('COMMIT');return value;}catch(error){db.exec('ROLLBACK');throw error;}}
@@ -136,4 +136,6 @@ const server=http.createServer(async(req,res)=>{
   }catch(error){console.error(error);if(!res.headersSent)send(res,500,{error:'The request could not be completed.'});else res.destroy();}
 });
 function serve(name,res){const file=path.join(ROOT,name);if(!allowedFiles.has(name))return send(res,404,{error:'Not found.'});res.writeHead(200,{'content-type':mime[path.extname(name)]||'application/octet-stream','cache-control':'no-cache','x-content-type-options':'nosniff','referrer-policy':'same-origin','x-frame-options':'DENY'});fs.createReadStream(file).pipe(res);}
-const port=Number(process.env.PORT)||8000;server.listen(port,'127.0.0.1',()=>console.log(`Student Result Portal running at http://localhost:${port} (admin: /admin)`));
+const port=Number(process.env.PORT)||8000;
+const host=process.env.HOST||(process.env.NODE_ENV==='production'?'0.0.0.0':'127.0.0.1');
+server.listen(port,host,()=>console.log(`Student Result Portal running at http://${host}:${port} (admin: /admin)`));

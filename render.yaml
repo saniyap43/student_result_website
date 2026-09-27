@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: faizan-ummul-khair-results
+    runtime: node
+    plan: starter
+    buildCommand: node --check server.js
+    startCommand: npm start
+    healthCheckPath: /api/site
+    disk:
+      name: result-portal-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

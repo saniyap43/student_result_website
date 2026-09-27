@@ -30,6 +30,16 @@ For CSV import/export use one row per subject with these exact columns: `Class,R
 
 ## Scope and deployment
 
-This local starter provides a single administrator account and one local SQLite database. It does not yet include student accounts, separate departments/courses/subject catalogues, examination scheduling, grading-rule configuration, bulk Excel import, QR result verification, or multi-admin roles. Dates, SGPA/CGPA, and examination names are not present in the source workbook, so the portal does not fabricate them.
+This local starter provides a single administrator account and one SQLite database. It does not yet include student accounts, separate departments/courses/subject catalogues, examination scheduling, grading-rule configuration, bulk Excel import, QR result verification, or multi-admin roles. Dates, SGPA/CGPA, and examination names are not present in the source workbook, so the portal does not fabricate them.
 
-Do not expose this local server directly to the internet. Public deployment needs a managed database, HTTPS, production session storage, backups, operational monitoring, and institute-approved access and verification policies. In particular, father's name is only an additional lookup check; it is not strong authentication.
+### Hosting
+
+Pushing this repository to GitHub stores the source code; it does not start the application. GitHub Pages only publishes static files, while this portal needs the Node.js server for its API, CAPTCHA, admin login, and SQLite database. Host it on a Node.js web-service provider instead.
+
+Configure the provider with Node.js 24 or newer and the start command `npm start`. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` as private environment secrets, `NODE_ENV=production`, and `DATA_DIR` to a persistent disk or mounted data directory. The server uses the provider's `PORT` and binds publicly in production; locally it still binds only to `127.0.0.1`. Do not use an ephemeral filesystem for `DATA_DIR`, because database edits and uploaded logos would be lost on restart or redeploy.
+
+The private `server-data/` directory is intentionally excluded from Git. The included `render.yaml` is a Render Blueprint for the full Node.js site. It provisions a paid Starter web service and a persistent 1 GB disk, sets `DATA_DIR=/var/data`, and asks you to enter `ADMIN_USERNAME` and `ADMIN_PASSWORD` privately during setup. Review Render's current pricing before creating the service.
+
+A hosted database starts empty because student data and `.env` are excluded from Git. After deployment, sign in to `/admin` with the credentials you set in Render and import the result CSV. To transfer the current local records, export them from the local admin page and import that CSV on the hosted admin page. Keep student data private; do not commit it to GitHub. Public hosting also requires institute approval, HTTPS, backups, and an access policy appropriate for student results.
+
+To deploy, push this project (including `render.yaml`) to the GitHub repository, then in Render choose **New → Blueprint**, connect that repository, and apply the Blueprint. Enter a private admin username and a unique password of at least 11 characters when prompted. Render will create the web service and persistent disk. After it reports the service as live, open its URL, sign in at `/admin`, and import the CSV exported from your local admin page. Check Render's current plan and disk prices before applying the Blueprint; its Starter service and disk are paid resources.
