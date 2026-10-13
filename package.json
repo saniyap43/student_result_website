@@ -2,12 +2,16 @@
   "name": "faizan-ummul-khair-results",
   "version": "1.0.0",
   "private": true,
-  "description": "Local student result portal with protected administrator controls",
+  "description": "Student result portal with Neon PostgreSQL and protected administrator controls",
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
-    "dev": "node --watch --env-file-if-exists=.env server.js"
+    "dev": "node --watch --env-file-if-exists=.env server.js",
+    "migrate:neon": "node --env-file-if-exists=.env scripts/migrate-sqlite-to-postgres.js"
   },
   "engines": {
     "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
   }
 }

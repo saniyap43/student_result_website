@@ -1,3 +1,4 @@
 .env
 server-data/
+student-results-upload.csv
 node_modules/

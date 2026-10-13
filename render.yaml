@@ -2,19 +2,15 @@ services:
   - type: web
     name: faizan-ummul-khair-results
     runtime: node
-    plan: starter
-    buildCommand: node --check server.js
+    plan: free
+    buildCommand: npm ci && node --check server.js && node --check db.js && node --check scripts/migrate-sqlite-to-postgres.js
     startCommand: npm start
     healthCheckPath: /api/site
-    disk:
-      name: result-portal-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATA_DIR
-        value: /var/data
+      - key: DATABASE_URL
+        sync: false
       - key: ADMIN_USERNAME
         sync: false
       - key: ADMIN_PASSWORD

@@ -1,45 +1,63 @@
-# Faizan e ummul khair Result Portal
+# Faizan e Ummul Khair Result Portal
 
-Bilingual English/Urdu result portal with a local Node.js server and SQLite database. The initial records were imported from the six workbook classes. Student data is kept under `server-data/`, which the web server never exposes as static files.
+Bilingual English/Urdu student results portal backed by Neon PostgreSQL. The existing frontend, CAPTCHA, admin login, result management, CSV import/export, notices, settings, and logo upload remain part of the app. The uploaded logo is stored in PostgreSQL so it persists across Render restarts.
 
 ## Requirements
 
-- Node.js 24 or newer (uses Node's built-in SQLite support; no npm packages are needed).
+- Node.js 24 or newer
+- `npm install` (the project uses the `pg` package)
+- A PostgreSQL connection URL in `DATABASE_URL`
 
-## Start locally on Windows
+## Run locally
 
-1. In PowerShell, open this project folder.
-2. Create your private admin configuration: `Copy-Item .env.example .env` (an `.env` is already configured in this workspace).
-3. If configuring a fresh copy, open `.env` and set a unique admin username and a long password (at least 11 characters). Do not share or commit `.env`.
-4. Start the portal with `npm start`.
-5. Open <http://localhost:8000>. The admin page is at <http://localhost:8000/admin>.
+1. Copy `.env.example` to `.env` if you do not already have a local `.env`.
+2. Set `DATABASE_URL` in `.env` to the Neon connection string from your Neon dashboard. Keep it private; `.env` is ignored by Git. Do not send the URL in chat or commit it.
+3. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env` (username at least 3 characters; password at least 11 characters).
+4. Run `npm install`, then `npm start`.
+5. Open <http://localhost:8000>. Admin is at <http://localhost:8000/admin>.
 
-On first start, the server imports `server-data/seed-results.json` into `server-data/portal.sqlite`. Later changes made from Admin are stored in SQLite. Keep backups of `server-data/portal.sqlite` somewhere protected.
+The server creates the PostgreSQL tables before listening. It does not automatically load the CSV or seed file at startup.
 
-## Admin features
+## Migrate the existing local data to Neon
 
-- Dashboard counts, search and filter student records, edit or add student/result rows, deactivate/reactivate records, and import/export CSV data.
-- Edit subject names and marks in a record's JSON marks field. Update total, percentage, grade, and status explicitly; the portal does not invent grading rules.
-- Create, edit, publish, and delete bilingual notices.
-- Change the institute name, portal subtitle, hero heading and introduction, footer message, and logo from Institute settings.
-- Review an append-only-in-the-interface audit history of admin actions.
+The original SQLite database and seed JSON are kept in `server-data/`; the current CSV file is in the project root. The migration script reads `server-data/portal.sqlite`; if it contains no result rows, it uses `server-data/seed-results.json` instead. It never changes or deletes the SQLite database, seed JSON, or CSV.
 
-Result lookup requires a roll number, an optional batch/class filter, and a server-issued mixed-case CAPTCHA. Search is rate-limited. Admin passwords are read from `.env`; sessions use HttpOnly, SameSite cookies and expire after an hour. Use a longer, unique password before the portal is used beyond localhost.
+1. Stop the local website with **Ctrl+C** in its terminal. In PowerShell, from the project folder, make a protected backup before migration:
 
-For CSV import/export use one row per subject with these exact columns: `Class,RollNo,Name,FatherName,Subject,Mark,Total,Percentage,Grade,Status`. Repeated subject rows are grouped into one student result, and the import validates the full file before updating records. Use the CSV template button in the admin panel.
+   ```powershell
+   $backup = "server-data/backups/before-neon-$(Get-Date -Format yyyyMMdd-HHmmss)"
+   New-Item -ItemType Directory -Force $backup | Out-Null
+   Copy-Item server-data/portal.sqlite* $backup
+   Copy-Item server-data/seed-results.json,student-results-upload.csv $backup
+   ```
 
-## Scope and deployment
+   Keep that backup private. This copies the SQLite database and any WAL/SHM companion files together, plus the seed and CSV. Do not delete the originals.
 
-This local starter provides a single administrator account and one SQLite database. It does not yet include student accounts, separate departments/courses/subject catalogues, examination scheduling, grading-rule configuration, bulk Excel import, QR result verification, or multi-admin roles. Dates, SGPA/CGPA, and examination names are not present in the source workbook, so the portal does not fabricate them.
+2. Make sure the local `.env` contains the `DATABASE_URL` for the Neon database you intend to use. Keep this value private.
+3. In PowerShell, open this project folder and run:
 
-### Hosting
+   ```powershell
+   npm run migrate:neon -- --conflict=skip
+   ```
 
-Pushing this repository to GitHub stores the source code; it does not start the application. GitHub Pages only publishes static files, while this portal needs the Node.js server for its API, CAPTCHA, admin login, and SQLite database. Host it on a Node.js web-service provider instead.
+   `--conflict=skip` keeps existing Neon rows with the same class/roll combination or record ID and reports them as skipped. Use `--conflict=abort` to stop before migrating if either kind of conflict exists. The script requires one of these choices and never overwrites existing Neon records. It migrates records, settings, notices, audit entries, and an uploaded logo if one exists locally. The migration runs in a PostgreSQL transaction; errors roll back the whole migration. Output contains counts only, not student details or database credentials.
 
-Configure the provider with Node.js 24 or newer and the start command `npm start`. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` as private environment secrets, `NODE_ENV=production`, and `DATA_DIR` to a persistent disk or mounted data directory. The server uses the provider's `PORT` and binds publicly in production; locally it still binds only to `127.0.0.1`. Do not use an ephemeral filesystem for `DATA_DIR`, because database edits and uploaded logos would be lost on restart or redeploy.
+4. Read the counts printed by the script. `conflicting` means an existing Neon row shared a class/roll number or ID but its content differed; it was skipped and left unchanged. Review such rows from the admin interface before deciding what to do.
+5. Start the app with `npm start` and check a known roll number, admin login, and the admin pages.
 
-The private `server-data/` directory is intentionally excluded from Git. The included `render.yaml` is a Render Blueprint for the full Node.js site. It provisions a paid Starter web service and a persistent 1 GB disk, sets `DATA_DIR=/var/data`, and asks you to enter `ADMIN_USERNAME` and `ADMIN_PASSWORD` privately during setup. Review Render's current pricing before creating the service.
+The script is repeatable: already-present class/roll pairs and IDs are skipped. No automatic CSV import runs on server start.
 
-A hosted database starts empty because student data and `.env` are excluded from Git. After deployment, sign in to `/admin` with the credentials you set in Render and import the result CSV. To transfer the current local records, export them from the local admin page and import that CSV on the hosted admin page. Keep student data private; do not commit it to GitHub. Public hosting also requires institute approval, HTTPS, backups, and an access policy appropriate for student results.
+## Render configuration
 
-To deploy, push this project (including `render.yaml`) to the GitHub repository, then in Render choose **New → Blueprint**, connect that repository, and apply the Blueprint. Enter a private admin username and a unique password of at least 11 characters when prompted. Render will create the web service and persistent disk. After it reports the service as live, open its URL, sign in at `/admin`, and import the CSV exported from your local admin page. Check Render's current plan and disk prices before applying the Blueprint; its Starter service and disk are paid resources.
+Set these private environment variables for the web service:
+
+- `DATABASE_URL`: Neon PostgreSQL connection string
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `NODE_ENV=production`
+
+The included Blueprint uses Render's free web-service plan and no Render disk; the PostgreSQL database and uploaded logo are stored in Neon. Free Render services can spin down when idle, so the first request after inactivity can be delayed. Applying a Blueprint can change service settings; review the plan in Render before confirming. The app does not deploy automatically from this repository.
+
+After pushing the code to GitHub, deploy it from Render and confirm the environment variables are set there. Migrate local data using the local command above and a private `.env` containing the Neon URL; do not put the URL or student data in GitHub. Then open the Render URL and verify the public result search and `/admin` login.
+
+The app uses Neon TLS with certificate verification enabled. Database connection errors are reported without printing the connection string. Keep the Neon URL and admin credentials private, and back up the database appropriately.
