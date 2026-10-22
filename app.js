@@ -62,7 +62,7 @@ async function search(){
   const rollNo=$('#roll').value.trim().replace(/\.0$/,'');if(!rollNo){$('#notice').textContent=t('emptyRoll');$('#result').hidden=true;return;}
   if(!challengeId){$('#notice').textContent=t('captchaLoad');return;}
   $('#notice').textContent='';$('#search').disabled=true;
-  try{const response=await fetch('/api/results/search',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rollNo,academicYear:$('#year-filter').value,className:$('#class-filter').value,captcha:$('#captcha').value,challengeId})}),data=await response.json();if(!response.ok)throw Error(response.status===404?t('empty'):response.status===400?t('captchaError'):data.error||t('empty'));$('#result').innerHTML=resultCard(data.result);$('#result').hidden=false;await newCaptcha();$('#result').scrollIntoView({behavior:'smooth',block:'start'});}
+  try{const response=await fetch('/api/results/search',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rollNo,academicYear:$('#year-filter').value,className:$('#class-filter').value,captcha:$('#captcha').value,challengeId})}),data=await response.json();if(!response.ok)throw Error(response.status===404?t('empty'):response.status===400?t('captchaError'):data.error||t('empty'));$('#result').innerHTML=(data.results||[data.result]).map(resultCard).join('');$('#result').hidden=false;await newCaptcha();$('#result').scrollIntoView({behavior:'smooth',block:'start'});}
   catch(error){$('#result').hidden=true;await newCaptcha();$('#notice').textContent=challengeId?error.message:t('captchaLoad');}
   finally{$('#search').disabled=false;}
 }

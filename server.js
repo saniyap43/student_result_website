@@ -191,7 +191,12 @@ async function handle(req, res) {
         : await pool.query("SELECT * FROM records WHERE active = TRUE AND roll_no = $1 AND ($2 = '' OR LEFT(roll_no, 2) = $2) ORDER BY class_name LIMIT 2", [rollNo, yearPrefix]);
       if (!result.rowCount) return send(res, 404, { error: 'No result matched those details.' });
       if (result.rowCount > 1) return send(res, 409, { error: 'This roll number appears in more than one class. Select a class to find the right result.' });
-      return send(res, 200, { result: row(result.rows[0]) });
+      const selected = result.rows[0];
+      const related = selected.father_name && text(selected.father_name, 160)
+        ? await pool.query("SELECT * FROM records WHERE active = TRUE AND id <> $1 AND LEFT(roll_no, 2) IN ('25', '26') AND LEFT(roll_no, 2) <> LEFT($2, 2) AND LOWER(BTRIM(name)) = LOWER(BTRIM($3)) AND LOWER(BTRIM(father_name)) = LOWER(BTRIM($4)) ORDER BY roll_no", [selected.id, selected.roll_no, selected.name, selected.father_name])
+        : { rows: [] };
+      const results = [selected, ...related.rows].map(row);
+      return send(res, 200, { result: results[0], results });
     }
     if (req.method === 'POST' && url.pathname === '/api/admin/login') {
       if (!limited(req, 'admin-login', 6)) return send(res, 429, { error: 'Too many login attempts. Try again later.' });
