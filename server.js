@@ -49,6 +49,7 @@ function row(record) {
     id: Number.isSafeInteger(Number(record.id)) ? Number(record.id) : String(record.id),
     className: record.class_name,
     rollNo: record.roll_no,
+    academicYear: yearFromRollNo(record.roll_no),
     name: record.name,
     fatherName: record.father_name,
     marks: typeof record.marks_json === 'string' ? JSON.parse(record.marks_json) : (record.marks_json || {}),
@@ -106,6 +107,7 @@ function body(req, maxBytes = 2 * 1024 * 1024) {
   });
 }
 function text(value, max = 500) { return String(value ?? '').trim().slice(0, max); }
+function yearFromRollNo(rollNo) { const match = String(rollNo || '').match(/^(25|26)/); return match ? `20${match[1]}` : ''; }
 function validRecord(data) {
   return data && text(data.className, 80) && text(data.rollNo, 60) && text(data.name, 160)
     && data.marks && typeof data.marks === 'object' && !Array.isArray(data.marks)
@@ -151,13 +153,14 @@ async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
   try {
     if (req.method === 'GET' && url.pathname === '/api/site') {
-      const [config, notices, classes, count] = await Promise.all([
+      const [config, notices, classes, years, count] = await Promise.all([
         settings(),
         pool.query('SELECT id, title_en, title_ur, body_en, body_ur, category, created_at FROM notices WHERE published = TRUE ORDER BY id DESC LIMIT 10'),
         pool.query('SELECT DISTINCT class_name FROM records WHERE active = TRUE ORDER BY class_name'),
+        pool.query("SELECT DISTINCT CASE LEFT(roll_no, 2) WHEN '25' THEN '2025' WHEN '26' THEN '2026' END AS year FROM records WHERE active = TRUE AND LEFT(roll_no, 2) IN ('25', '26') ORDER BY year"),
         pool.query('SELECT COUNT(*) AS n FROM records WHERE active = TRUE')
       ]);
-      return send(res, 200, { settings: config, notices: notices.rows, classes: classes.rows.map(item => item.class_name), studentCount: Number(count.rows[0].n) });
+      return send(res, 200, { settings: config, notices: notices.rows, classes: classes.rows.map(item => item.class_name), years: years.rows.map(item => item.year), studentCount: Number(count.rows[0].n) });
     }
     if (req.method === 'GET' && url.pathname === '/api/brand-logo') {
       const result = await pool.query('SELECT content, mime FROM brand_assets WHERE id = $1', ['primary']);
@@ -179,12 +182,15 @@ async function handle(req, res) {
       const data = await body(req), challengeId = text(data.challengeId, 80), challenge = captchas.get(challengeId);
       captchas.delete(challengeId);
       if (!challenge || challenge.expires < Date.now() || String(data.captcha || '') !== challenge.answer) return send(res, 400, { error: 'Verification failed. Refresh the code and try again.' });
-      const rollNo = text(data.rollNo, 60), className = text(data.className, 80);
+      const rollNo = text(data.rollNo, 60), className = text(data.className, 80), academicYear = text(data.academicYear, 4);
+      if (academicYear && !['2025', '2026'].includes(academicYear)) return send(res, 400, { error: 'Select a valid result year.' });
+      const yearPrefix = academicYear ? academicYear.slice(2) : '';
       if (!rollNo) return send(res, 400, { error: 'Enter your roll number.' });
       const result = className
-        ? await pool.query('SELECT * FROM records WHERE active = TRUE AND roll_no = $1 AND class_name = $2', [rollNo, className])
-        : await pool.query('SELECT * FROM records WHERE active = TRUE AND roll_no = $1 ORDER BY class_name LIMIT 1', [rollNo]);
+        ? await pool.query("SELECT * FROM records WHERE active = TRUE AND roll_no = $1 AND class_name = $2 AND ($3 = '' OR LEFT(roll_no, 2) = $3)", [rollNo, className, yearPrefix])
+        : await pool.query("SELECT * FROM records WHERE active = TRUE AND roll_no = $1 AND ($2 = '' OR LEFT(roll_no, 2) = $2) ORDER BY class_name LIMIT 2", [rollNo, yearPrefix]);
       if (!result.rowCount) return send(res, 404, { error: 'No result matched those details.' });
+      if (result.rowCount > 1) return send(res, 409, { error: 'This roll number appears in more than one class. Select a class to find the right result.' });
       return send(res, 200, { result: row(result.rows[0]) });
     }
     if (req.method === 'POST' && url.pathname === '/api/admin/login') {
